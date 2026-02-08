@@ -129,6 +129,13 @@ def to_png(arr):
     return buf.tobytes()
 
 
+def show_image(arr):
+    """Numpy array'i guvenli sekilde goster"""
+    from PIL import Image
+    pil_img = Image.fromarray(arr, mode="L")
+    st.image(pil_img, use_container_width=True)
+
+
 # ===================================================================
 #  BASLIK
 # ===================================================================
@@ -158,15 +165,17 @@ with tab_encrypt:
         MAX_DIM = 512  # Web icin max boyut (hiz/bellek dengesi)
 
         uploaded = st.file_uploader("Goruntu Yukle", type=["png","jpg","jpeg","bmp"],
-                                    label_visibility="collapsed")
+                                    label_visibility="collapsed",
+                                    key="img_uploader")
         if uploaded is not None:
-            file_id = uploaded.file_id
-            if st.session_state.get("_last_file_id") != file_id:
+            # Ayni dosya tekrar okunmasin
+            file_key = uploaded.name + "_" + str(uploaded.size)
+            if st.session_state.get("_last_file_key") != file_key:
+                uploaded.seek(0)
                 fbytes = np.frombuffer(uploaded.read(), np.uint8)
                 img = cv2.imdecode(fbytes, cv2.IMREAD_GRAYSCALE)
                 if img is not None:
                     orig_shape = img.shape
-                    # Buyuk goruntuleri otomatik resize et
                     h, w = img.shape
                     if max(h, w) > MAX_DIM:
                         scale = MAX_DIM / max(h, w)
@@ -181,8 +190,7 @@ with tab_encrypt:
                     st.session_state["original"] = img
                     st.session_state["encrypted"] = None
                     st.session_state["decrypted"] = None
-                    st.session_state["_last_file_id"] = file_id
-                    st.rerun()
+                    st.session_state["_last_file_key"] = file_key
 
         dl1, dl2 = st.columns(2)
         with dl1:
@@ -349,14 +357,14 @@ with tab_encrypt:
         with r1c1:
             st.markdown('<p class="image-box-title">\U0001f4f7 Orijinal Görüntü</p>', unsafe_allow_html=True)
             if st.session_state["original"] is not None:
-                st.image(st.session_state["original"], clamp=True, use_container_width=True)
+                show_image(st.session_state["original"])
             else:
                 st.markdown('<div class="image-box">Goruntu yok</div>', unsafe_allow_html=True)
 
         with r1c2:
             st.markdown('<p class="image-box-title">\U0001f512 Şifreli Görüntü</p>', unsafe_allow_html=True)
             if st.session_state["encrypted"] is not None:
-                st.image(st.session_state["encrypted"], clamp=True, use_container_width=True)
+                show_image(st.session_state["encrypted"])
             else:
                 st.markdown('<div class="image-box">Sifreleme yapilmadi</div>', unsafe_allow_html=True)
 
@@ -364,7 +372,7 @@ with tab_encrypt:
         with r2c1:
             st.markdown('<p class="image-box-title">\U0001f513 Deşifreli Görüntü</p>', unsafe_allow_html=True)
             if st.session_state["decrypted"] is not None:
-                st.image(st.session_state["decrypted"], clamp=True, use_container_width=True)
+                show_image(st.session_state["decrypted"])
             else:
                 st.markdown('<div class="image-box">Desifreleme yapilmadi</div>', unsafe_allow_html=True)
 
