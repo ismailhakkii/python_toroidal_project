@@ -1,0 +1,22 @@
+# ChaosPolybius-2026 Requirements
+# Python 3.8+
+
+# Görüntü İşleme
+opencv-python>=4.8.0
+
+# Bilimsel Hesaplama
+numpy>=1.24.0
+scipy>=1.10.0
+
+# Görselleştirme
+matplotlib>=3.7.0
+
+# Graf İşlemleri (Toroidal DFS için opsiyonel)
+networkx>=3.0
+
+# Kuantum Simülasyonu (Opsiyonel - yoksa basit simülasyon)
+qiskit>=1.0.0
+qiskit-aer>=0.13.0
+
+# Performans Hızlandırma (Opsiyonel)
+numba>=0.58.0

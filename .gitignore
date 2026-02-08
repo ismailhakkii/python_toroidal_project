@@ -1,0 +1,25 @@
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.env
+.venv/
+venv/
+
+# Test çıktıları
+test_*.png
+encrypted.png
+decrypted.png
+encryption_demo.png
+test_results.png
+*.png
+!screenshot*.png
+
+# Secrets
+.streamlit/secrets.toml
+
+# IDE
+.vscode/
+.idea/

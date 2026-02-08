@@ -1,0 +1,16 @@
+# ChaosPolybius-2026 — Web Deployment
+# Streamlit Cloud / Hugging Face Spaces
+
+# Web Arayüzü
+streamlit>=1.30.0
+
+# Görüntü İşleme
+opencv-python-headless>=4.8.0
+Pillow>=10.0.0
+
+# Bilimsel Hesaplama
+numpy>=1.24.0
+scipy>=1.10.0
+
+# Görselleştirme
+matplotlib>=3.7.0
