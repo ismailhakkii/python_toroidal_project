@@ -155,17 +155,34 @@ with tab_encrypt:
         # Dosya islemleri
         st.markdown('<div class="panel-card"><h4>\U0001f4c1 Dosya İşlemleri</h4></div>', unsafe_allow_html=True)
 
+        MAX_DIM = 512  # Web icin max boyut (hiz/bellek dengesi)
+
         uploaded = st.file_uploader("Goruntu Yukle", type=["png","jpg","jpeg","bmp"],
                                     label_visibility="collapsed")
         if uploaded is not None:
-            fbytes = np.frombuffer(uploaded.read(), np.uint8)
-            img = cv2.imdecode(fbytes, cv2.IMREAD_GRAYSCALE)
-            if img is not None:
-                st.session_state["original"] = img
-                st.session_state["encrypted"] = None
-                st.session_state["decrypted"] = None
-                add_log("Goruntu yuklendi: " + uploaded.name)
-                add_log("   Boyut: " + str(img.shape))
+            file_id = uploaded.file_id
+            if st.session_state.get("_last_file_id") != file_id:
+                fbytes = np.frombuffer(uploaded.read(), np.uint8)
+                img = cv2.imdecode(fbytes, cv2.IMREAD_GRAYSCALE)
+                if img is not None:
+                    orig_shape = img.shape
+                    # Buyuk goruntuleri otomatik resize et
+                    h, w = img.shape
+                    if max(h, w) > MAX_DIM:
+                        scale = MAX_DIM / max(h, w)
+                        new_h, new_w = int(h * scale), int(w * scale)
+                        img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+                        add_log("Goruntu yuklendi: " + uploaded.name)
+                        add_log("   Orijinal boyut: " + str(orig_shape))
+                        add_log("   Yeniden boyutlandirildi: " + str(img.shape) + " (max " + str(MAX_DIM) + "px)")
+                    else:
+                        add_log("Goruntu yuklendi: " + uploaded.name)
+                        add_log("   Boyut: " + str(img.shape))
+                    st.session_state["original"] = img
+                    st.session_state["encrypted"] = None
+                    st.session_state["decrypted"] = None
+                    st.session_state["_last_file_id"] = file_id
+                    st.rerun()
 
         dl1, dl2 = st.columns(2)
         with dl1:
@@ -230,13 +247,14 @@ with tab_encrypt:
             if st.session_state["original"] is None:
                 st.warning("Once bir goruntu yukleyin!")
             else:
-                add_log("Sifreleme basliyor...")
-                t0 = time.time()
-                enc = encrypt_image_from_array(st.session_state["original"], base_key)
-                elapsed = (time.time() - t0) * 1000
-                st.session_state["encrypted"] = enc
-                st.session_state["decrypted"] = None
-                add_log("Sifreleme tamamlandi (" + str(round(elapsed, 1)) + " ms)")
+                with st.spinner("Sifreleniyor..."):
+                    add_log("Sifreleme basliyor...")
+                    t0 = time.time()
+                    enc = encrypt_image_from_array(st.session_state["original"], base_key)
+                    elapsed = (time.time() - t0) * 1000
+                    st.session_state["encrypted"] = enc
+                    st.session_state["decrypted"] = None
+                    add_log("Sifreleme tamamlandi (" + str(round(elapsed, 1)) + " ms)")
                 st.rerun()
 
         if decrypt_btn:
@@ -245,22 +263,23 @@ with tab_encrypt:
             elif st.session_state["original"] is None:
                 st.warning("Orijinal goruntu gerekli!")
             else:
-                add_log("Desifreleme basliyor...")
-                t0 = time.time()
-                dec = decrypt_image(
-                    st.session_state["encrypted"], base_key,
-                    st.session_state["original"]
-                )
-                elapsed = (time.time() - t0) * 1000
-                st.session_state["decrypted"] = dec
-                mse = float(np.mean(
-                    (st.session_state["original"].astype(float) - dec.astype(float)) ** 2
-                ))
-                add_log("Desifreleme tamamlandi (" + str(round(elapsed, 1)) + " ms)")
-                if mse == 0:
-                    add_log("   MSE: 0.000000 BASARILI")
-                else:
-                    add_log("   MSE: " + str(round(mse, 6)) + " HATA")
+                with st.spinner("Desifreleniyor..."):
+                    add_log("Desifreleme basliyor...")
+                    t0 = time.time()
+                    dec = decrypt_image(
+                        st.session_state["encrypted"], base_key,
+                        st.session_state["original"]
+                    )
+                    elapsed = (time.time() - t0) * 1000
+                    st.session_state["decrypted"] = dec
+                    mse = float(np.mean(
+                        (st.session_state["original"].astype(float) - dec.astype(float)) ** 2
+                    ))
+                    add_log("Desifreleme tamamlandi (" + str(round(elapsed, 1)) + " ms)")
+                    if mse == 0:
+                        add_log("   MSE: 0.000000 BASARILI")
+                    else:
+                        add_log("   MSE: " + str(round(mse, 6)) + " HATA")
                 st.rerun()
 
         # Guvenlik metrikleri
