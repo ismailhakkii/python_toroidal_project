@@ -114,27 +114,20 @@ def encrypt_image(image_path, base_key):
     
     flat_img = img.flatten()
     
+    # Permütasyon: NumPy vektörizasyonu
+    path_flat_indices = np.array([r * W + c for r, c in path], dtype=np.int32)
     if USE_NUMBA:
-        # Numba ile hızlı permütasyon
-        path_flat_indices = np.array([r * W + c for r, c in path], dtype=np.int32)
         permuted_flat = fast_permutation_apply(flat_img, path_flat_indices)
     else:
-        # Normal Python döngüsü
-        permuted_flat = np.zeros_like(flat_img)
-        for i, (r, c) in enumerate(path):
-            orig_idx = r * W + c
-            permuted_flat[i] = flat_img[orig_idx]
+        permuted_flat = flat_img[path_flat_indices]
     
-    print(f"Permütasyon tamamlandı {'(Numba hızlı mod)' if USE_NUMBA else ''}")
+    print(f"Permütasyon tamamlandı {'(Numba)' if USE_NUMBA else '(NumPy)'}")
     
     # 5. S-Box Substitution
     print(f"S-Box substitution yapılıyor...")
     sbox = DynamicPolybius(fplm_sbox)
     
-    if USE_NUMBA:
-        substituted_flat = fast_sbox_substitute(permuted_flat, sbox.sbox)
-    else:
-        substituted_flat = sbox.substitute(permuted_flat)
+    substituted_flat = sbox.substitute(permuted_flat)  # Zaten NumPy vektörize: sbox[data]
     
     # 6. XOR Difüzyon (Zincirleme)
     print(f"XOR difüzyonu yapılıyor...")
@@ -142,16 +135,15 @@ def encrypt_image(image_path, base_key):
     # FPLM'den anahtar akışı üret
     key_stream = fplm_diff.get_key_stream(H * W)
     
+    # XOR Difüzyon: Önce P XOR K hesapla (vektörize), sonra zincirleme
+    xored = np.bitwise_xor(substituted_flat, key_stream)
     if USE_NUMBA:
         encrypted_flat = fast_xor_diffusion(substituted_flat, key_stream)
     else:
-        encrypted_flat = np.zeros(H * W, dtype=np.uint8)
-        prev = 0
-        
-        for i in range(H * W):
-            # Zincirleme XOR: C[i] = P[i] XOR K[i] XOR C[i-1]
-            encrypted_flat[i] = substituted_flat[i] ^ key_stream[i] ^ prev
-            prev = encrypted_flat[i]
+        encrypted_flat = np.empty(H * W, dtype=np.uint8)
+        encrypted_flat[0] = xored[0]
+        for i in range(1, H * W):
+            encrypted_flat[i] = xored[i] ^ encrypted_flat[i - 1]
     
     encrypted_img = encrypted_flat.reshape(H, W)
     
@@ -200,35 +192,29 @@ def decrypt_image(encrypted_img, base_key, original_img_for_hash):
     
     flat_encrypted = encrypted_img.flatten()
     
+    # Ters XOR difüzyon: NumPy vektörizasyonu
     if USE_NUMBA:
         substituted_flat = fast_inverse_xor_diffusion(flat_encrypted, key_stream)
     else:
-        substituted_flat = np.zeros_like(flat_encrypted)
-        prev = 0
-        for i in range(H * W):
-            # Ters zincirleme XOR: P[i] = C[i] XOR K[i] XOR C[i-1]
-            substituted_flat[i] = flat_encrypted[i] ^ key_stream[i] ^ prev
-            prev = flat_encrypted[i]
+        prev_chain = np.empty_like(flat_encrypted)
+        prev_chain[0] = 0
+        prev_chain[1:] = flat_encrypted[:-1]
+        substituted_flat = np.bitwise_xor(np.bitwise_xor(flat_encrypted, key_stream), prev_chain)
     
     # 6. S-Box'ı ters uygula
     print(f"S-Box ters substitution yapılıyor...")
     
-    if USE_NUMBA:
-        permuted_flat = fast_sbox_inverse(substituted_flat, sbox.inverse_sbox)
-    else:
-        permuted_flat = sbox.inverse_substitute(substituted_flat)
+    permuted_flat = sbox.inverse_substitute(substituted_flat)  # Zaten NumPy vektörize
     
     # 7. Permütasyonu ters çöz
     print(f"Permütasyon tersine çevriliyor...")
     
+    path_flat_indices = np.array([r * W + c for r, c in path], dtype=np.int32)
     if USE_NUMBA:
-        path_flat_indices = np.array([r * W + c for r, c in path], dtype=np.int32)
         decrypted_flat = fast_inverse_permutation_apply(permuted_flat, path_flat_indices)
     else:
-        decrypted_flat = np.zeros_like(permuted_flat)
-        for i, (r, c) in enumerate(path):
-            orig_idx = r * W + c
-            decrypted_flat[orig_idx] = permuted_flat[i]
+        decrypted_flat = np.empty_like(permuted_flat)
+        decrypted_flat[path_flat_indices] = permuted_flat
     
     decrypted_img = decrypted_flat.reshape(H, W)
     
@@ -265,35 +251,28 @@ def encrypt_image_from_array(img_array, base_key):
     
     flat_img = img_array.flatten()
     
+    # Permütasyon: NumPy vektörizasyonu
+    path_flat_indices = np.array([r * W + c for r, c in path], dtype=np.int32)
     if USE_NUMBA:
-        path_flat_indices = np.array([r * W + c for r, c in path], dtype=np.int32)
         permuted_flat = fast_permutation_apply(flat_img, path_flat_indices)
     else:
-        permuted_flat = np.zeros_like(flat_img)
-        for i, (r, c) in enumerate(path):
-            orig_idx = r * W + c
-            permuted_flat[i] = flat_img[orig_idx]
+        permuted_flat = flat_img[path_flat_indices]
     
     # S-Box (şifreleme ile aynı sırada)
     sbox = DynamicPolybius(fplm_sbox)
-    
-    if USE_NUMBA:
-        substituted_flat = fast_sbox_substitute(permuted_flat, sbox.sbox)
-    else:
-        substituted_flat = sbox.substitute(permuted_flat)
+    substituted_flat = sbox.substitute(permuted_flat)  # NumPy vektörize
     
     # XOR
     key_stream = fplm_diff.get_key_stream(H * W)
     
+    xored = np.bitwise_xor(substituted_flat, key_stream)
     if USE_NUMBA:
         encrypted_flat = fast_xor_diffusion(substituted_flat, key_stream)
     else:
-        encrypted_flat = np.zeros(H * W, dtype=np.uint8)
-        prev = 0
-        
-        for i in range(H * W):
-            encrypted_flat[i] = substituted_flat[i] ^ key_stream[i] ^ prev
-            prev = encrypted_flat[i]
+        encrypted_flat = np.empty(H * W, dtype=np.uint8)
+        encrypted_flat[0] = xored[0]
+        for i in range(1, H * W):
+            encrypted_flat[i] = xored[i] ^ encrypted_flat[i - 1]
     
     return encrypted_flat.reshape(H, W)
 
